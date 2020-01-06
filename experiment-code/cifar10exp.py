@@ -43,8 +43,6 @@ parser.add_option('-a', '--agentWise', action='store_true', dest='agentWise', de
 # if 1 use min across classes
 # if 2 use static lexicographic
 # if 3 use dynamic lexicographic
-# if 4 use only current class score
-# if 5 use only current class score + diminishing previous score
 parser.add_option('-f', '--fitness', type='int', dest='fitnessMethod', default=0)
 
 (options, args) = parser.parse_args()
@@ -57,9 +55,8 @@ data = []
 labels = []
 
 print("Loading all training data...")
-
 # get all train data from all files into arrays
-cifarDataPath = os.path.dirname(__file__) + "../cifar-10-batches-py/data_batch_"
+cifarDataPath = os.path.dirname(__file__) + "/../cifar-10-batches-py/data_batch_"
 for i in range(5):
     with open(cifarDataPath + str(i+1), "rb") as f:
         mdict = pickle.load(f, encoding="bytes")
@@ -68,23 +65,38 @@ for i in range(5):
             labels.append(mdict[b"labels"][i])
 
 print("Creating dataframe from training data...")
+# put into dataframe for easy manipulation for shuffling and subsampling
+trainDf = pd.DataFrame(labels[:40000]).add_prefix("y").join(pd.DataFrame(data[:40000]).add_prefix("x"))
 
-# put into dataframe for easy manipulation
-trainDf = pd.DataFrame(labels).add_prefix("y").join(pd.DataFrame(data).add_prefix("x"))
+
+# validation data to check after each generation
+valData = np.array(data[40000:], dtype=float)
+valLabels = np.array(labels[40000:], dtype=int)
+valCounts = [0]*10
+tmp = pd.Series(valLabels)
+for c in range(10):
+    valCounts[c] = (tmp.values == c).sum()
+
+
 
 print("Loading test data...")
-
+testData = []
+testLabels = []
 # get test data
 with open(os.path.dirname(__file__) +
-                                "../cifar-10-batches-py/test_batch", "rb") as f:
+                                "/../cifar-10-batches-py/test_batch", "rb") as f:
     mdict = pickle.load(f, encoding="bytes")
     for i in range(len(mdict[b"data"])):
-        data.append(mdict[b"data"][i])
-        labels.append(mdict[b"labels"][i])
+        testData.append(mdict[b"data"][i])
+        testLabels.append(mdict[b"labels"][i])
 
-print("Creating dataframe from test data...")
+testData = np.array(testData, dtype=float)
+testLabels = np.array(testLabels, dtype=int)
 
-testDf = pd.DataFrame(labels).add_prefix("y").join(pd.DataFrame(data).add_prefix("x"))
+testCounts = [0]*10
+tmp = pd.Series(testLabels)
+for c in range(10):
+    testCounts[c] = (tmp.values == c).sum()
 
 ################################################################################
 # helper functions
@@ -105,21 +117,21 @@ def getDataForGeneration():
                         .apply(lambda x: x.sample(min(len(x), ss))).sample(frac=1))
 
     # get the actual count of data from each class
-    countDict = {}
+    counts = [0]*10
     for c in classes:
-        countDict[c] = (dataDf["y0"].values == c).sum()
+        counts[c] = (dataDf["y0"].values == c).sum()
 
     data = np.array(dataDf, dtype=float)
 
-    return data[:,1:], data[:,0], countDict
+    return data[:,1:], np.array(data[:,0], dtype=int), counts
 
 # run one agent on all data (samples)
-def runAgentWise(agent, samples, labels, countDict):
+def runAgentWise(agent, samples, labels, counts):
     for i in range(len(samples)):
         guess = agent.act(samples[i]/255)
         score = guess == labels[i]
         agent.team.outcomes[labels[i]] = (agent.team.outcomes.get(labels[i], 0) +
-                                          score/countDict[labels[i]])
+                                          score/counts[labels[i]])
 
 # run all agents on a single data sample
 def runSampleWise(agents, sample, label, count):
@@ -129,16 +141,23 @@ def runSampleWise(agents, sample, label, count):
         agent.team.outcomes[label] = agent.team.outcomes.get(label, 0) + score/count
 
 # runs all agents on the specified data and labels
-def runAgents(agents, data, labels, countDict):
+def runAgents(agents, data, labels, counts):
+
+    # reset scores to reobtain
+    for agent in agents:
+        for i in range(10):
+            if counts[i] > 0:
+                agent.team.outcomes[i] = 0
+
     # same agent on all data
     if options.agentWise:
         for agent in agents:
-            runAgentWise(agent, data, labels, countDict)
+            runAgentWise(agent, data, labels, counts)
 
     # cycle through all agents on each data
     else:
         for i in range(len(data)):
-            runSampleWise(agents, data[i], labels[i], countDict[labels[i]])
+            runSampleWise(agents, data[i], labels[i], counts[labels[i]])
 
 ################################################################################
 # experiment setup
@@ -153,7 +172,15 @@ trainer = Trainer(actions=range(10),
 # do it later (once stuff runs fine)
 
 # get the correct fitness method
-fitnessType = "average"
+if options.fitnessMethod == 0:
+    fitnessType = "average"
+elif options.fitnessMethod == 1:
+    fitnessType = "min"
+elif options.fitnessMethod == 2:
+    fitnessType = "staticLexicographic"
+elif options.fitnessMethod == 3:
+    fitnessType = "dynamicLexicographic"
+
 
 ################################################################################
 # execute experiment
@@ -161,18 +188,23 @@ fitnessType = "average"
 
 for g in range(options.nGens):
     print("Starting Generation #" + str(g+1) + ".")
-    agents = trainer.getAgents(skipTasks=range(10))
     print("Getting data for current generation...")
-    data, labels, countDict = getDataForGeneration()
+    data, labels, counts = getDataForGeneration()
+    agents = trainer.getAgents(skipTasks=[c for c in range(10) if counts[c] > 0])
     print("Running agents...")
-    runAgents(agents, data, labels, countDict)
+    runAgents(agents, data, labels, counts)
 
-    print("Reporting generational results...")
-    # report scores from best agent
-    print("\n\nOverall best agent:")
-    bestAgent = trainer.getAgents(sortTasks=range(10), multiTaskType=fitnessType)[0]
+    print("\nReporting generational results...")
+
+    print("Overall best agent (on train set):")
+    bestAgent = trainer.getAgents(sortTasks=[c for c in range(10) if counts[c] > 0],
+                                  multiTaskType=fitnessType)[0]
     print(bestAgent.team.outcomes)
 
     print("Evolving...")
-    #trainer.evolve(tasks=[c for c in countDict], multiTaskType=fitnessType)
-    trainer.evolve(tasks=[random.choice(range(10))], multiTaskType=fitnessType)
+    trainer.evolve(tasks=[c for c in range(10) if counts[c] > 0], multiTaskType=fitnessType)
+
+    print("Overall best agent (on validation set):")
+    bestAgent.team.outcomes = {}
+    runAgentWise(bestAgent, valData, valLabels, valCounts)
+    print(bestAgent.team.outcomes)
