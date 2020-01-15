@@ -6,6 +6,7 @@ from optparse import OptionParser
 import os
 import pandas as pd
 import random
+import copy
 
 ################################################################################
 # command line argument options
@@ -140,6 +141,21 @@ def runSampleWise(agents, sample, label, count):
         score = guess == label
         agent.team.outcomes[label] = agent.team.outcomes.get(label, 0) + score/count
 
+# run one agent on all data (samples)
+def runAgentWise2(agent, samples, labels, counts):
+    for i in range(len(samples)):
+        guess = agent.act(samples[i]/255)
+        score = guess == labels[i]
+        agent.team.outcomes[labels[i]] = (agent.team.outcomes.get(labels[i], 0) +
+                                          score/counts[labels[i]])
+
+# run all agents on a single data sample
+def runSampleWise2(agents, sample, label, count):
+    for agent in agents:
+        guess = agent.act(sample/255)
+        score = guess == label
+        agent.team.outcomes[label] = agent.team.outcomes.get(label, 0) + score/count
+
 # runs all agents on the specified data and labels
 def runAgents(agents, data, labels, counts):
 
@@ -207,6 +223,8 @@ for g in range(options.nGens):
     trainer.evolve(tasks=[c for c in range(10) if counts[c] > 0], multiTaskType=fitnessType)
 
     print("Overall best agent (on validation set):")
+    originalOutcomes = copy.deepcopy(bestAgent.team.outcomes)
     bestAgent.team.outcomes = {}
     runAgentWise(bestAgent, valData, valLabels, valCounts)
     print(bestAgent.team.outcomes)
+    bestAgent.team.outcomes = originalOutcomes
