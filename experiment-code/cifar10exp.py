@@ -189,7 +189,9 @@ elif options.fitnessMethod == 3:
 for g in range(options.nGens):
     print("Starting Generation #" + str(g+1) + ".")
     print("Getting data for current generation...")
-    data, labels, counts = getDataForGeneration()
+    # obtain new data every 5 generations
+    if g % 5 == 0:
+        data, labels, counts = getDataForGeneration()
     agents = trainer.getAgents(skipTasks=[c for c in range(10) if counts[c] > 0])
     print("Running agents...")
     runAgents(agents, data, labels, counts)
