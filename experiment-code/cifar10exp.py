@@ -126,34 +126,24 @@ def getDataForGeneration():
 
     return data[:,1:], np.array(data[:,0], dtype=int), counts
 
+
+sampleSuccesses = []
+
 # run one agent on all data (samples)
 def runAgentWise(agent, samples, labels, counts):
     for i in range(len(samples)):
         guess = agent.act(samples[i]/255)
         score = guess == labels[i]
+        sampleSuccesses[i] += score
         agent.team.outcomes[labels[i]] = (agent.team.outcomes.get(labels[i], 0) +
                                           score/counts[labels[i]])
 
 # run all agents on a single data sample
-def runSampleWise(agents, sample, label, count):
+def runSampleWise(agents, sample, label, count, i):
     for agent in agents:
         guess = agent.act(sample/255)
         score = guess == label
-        agent.team.outcomes[label] = agent.team.outcomes.get(label, 0) + score/count
-
-# run one agent on all data (samples)
-def runAgentWise2(agent, samples, labels, counts):
-    for i in range(len(samples)):
-        guess = agent.act(samples[i]/255)
-        score = guess == labels[i]
-        agent.team.outcomes[labels[i]] = (agent.team.outcomes.get(labels[i], 0) +
-                                          score/counts[labels[i]])
-
-# run all agents on a single data sample
-def runSampleWise2(agents, sample, label, count):
-    for agent in agents:
-        guess = agent.act(sample/255)
-        score = guess == label
+        sampleSuccesses[i] += score
         agent.team.outcomes[label] = agent.team.outcomes.get(label, 0) + score/count
 
 # runs all agents on the specified data and labels
@@ -165,6 +155,9 @@ def runAgents(agents, data, labels, counts):
             if counts[i] > 0:
                 agent.team.outcomes[i] = 0
 
+    # save successes on each sample
+    sampleSuccesses = np.zeros(len(data))
+
     # same agent on all data
     if options.agentWise:
         for agent in agents:
@@ -173,7 +166,10 @@ def runAgents(agents, data, labels, counts):
     # cycle through all agents on each data
     else:
         for i in range(len(data)):
-            runSampleWise(agents, data[i], labels[i], counts[labels[i]])
+            runSampleWise(agents, data[i], labels[i], counts[labels[i]], i)
+
+    # normalize it
+    sampleSuccesses /= len(data)
 
 ################################################################################
 # experiment setup
