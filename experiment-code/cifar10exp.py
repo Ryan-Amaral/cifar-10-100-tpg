@@ -7,6 +7,7 @@ import os
 import pandas as pd
 import random
 import copy
+import datetime
 
 ################################################################################
 # command line argument options
@@ -18,7 +19,7 @@ parser = OptionParser()
 parser.add_option('-g', '--gens', type='int', dest='nGens', default=1000)
 
 # tpg population size
-parser.add_option('-p', '--pop', type='int', dest='popSize', default=200)
+parser.add_option('-p', '--pop', type='int', dest='popSize', default=600)
 
 # whether or not to use memory
 # either way tpg uses a form of memory on each learner in the form of registers
@@ -45,6 +46,8 @@ parser.add_option('-a', '--agentWise', action='store_true', dest='agentWise', de
 # if 2 use static lexicographic
 # if 3 use dynamic lexicographic
 parser.add_option('-f', '--fitness', type='int', dest='fitnessMethod', default=0)
+
+parser.add_option("-t", "--timestamp", type="string", dest="timestamp", default=None)
 
 (options, args) = parser.parse_args()
 
@@ -127,14 +130,22 @@ def getDataForGeneration():
     return data[:,1:], np.array(data[:,0], dtype=int), counts
 
 
-sampleSuccesses = []
+sampleSuccesses = None
 
 # run one agent on all data (samples)
 def runAgentWise(agent, samples, labels, counts):
     for i in range(len(samples)):
         guess = agent.act(samples[i]/255)
         score = guess == labels[i]
-        sampleSuccesses[i] += score
+        #sampleSuccesses[i] += score
+        agent.team.outcomes[labels[i]] = (agent.team.outcomes.get(labels[i], 0) +
+                                          score/counts[labels[i]])
+
+# run one agent on all data (samples) for validation
+def runAgentValidation(agent, samples, labels, counts):
+    for i in range(len(samples)):
+        guess = agent.act(samples[i]/255)
+        score = guess == labels[i]
         agent.team.outcomes[labels[i]] = (agent.team.outcomes.get(labels[i], 0) +
                                           score/counts[labels[i]])
 
@@ -143,7 +154,8 @@ def runSampleWise(agents, sample, label, count, i):
     for agent in agents:
         guess = agent.act(sample/255)
         score = guess == label
-        sampleSuccesses[i] += score
+        print(i, len(sampleSuccesses))
+        #sampleSuccesses[i] += score
         agent.team.outcomes[label] = agent.team.outcomes.get(label, 0) + score/count
 
 # runs all agents on the specified data and labels
@@ -156,7 +168,8 @@ def runAgents(agents, data, labels, counts):
                 agent.team.outcomes[i] = 0
 
     # save successes on each sample
-    sampleSuccesses = np.zeros(len(data))
+    #global sampleSuccesses
+    #sampleSuccesses = np.zeros(len(data))
 
     # same agent on all data
     if options.agentWise:
@@ -169,7 +182,7 @@ def runAgents(agents, data, labels, counts):
             runSampleWise(agents, data[i], labels[i], counts[labels[i]], i)
 
     # normalize it
-    sampleSuccesses /= len(data)
+    #sampleSuccesses /= len(data)
 
 ################################################################################
 # experiment setup
@@ -181,7 +194,15 @@ trainer = Trainer(actions=range(10),
                   teamPopSize=options.popSize, rTeamPopSize=options.popSize)
 
 # logs
-# do it later (once stuff runs fine)
+if options.timestamp is not None:
+    # continue from previous run's timestamp
+    pass
+else:
+    # new timestamp for a new run
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M")
+    generationalLogName = "generational-log-{}.txt".format(timestamp)
+    with open()
+
 
 # get the correct fitness method
 if options.fitnessMethod == 0:
@@ -221,6 +242,6 @@ for g in range(options.nGens):
     print("Overall best agent (on validation set):")
     originalOutcomes = copy.deepcopy(bestAgent.team.outcomes)
     bestAgent.team.outcomes = {}
-    runAgentWise(bestAgent, valData, valLabels, valCounts)
+    runAgentValidation(bestAgent, valData, valLabels, valCounts)
     print(bestAgent.team.outcomes)
     bestAgent.team.outcomes = originalOutcomes
