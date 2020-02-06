@@ -202,7 +202,7 @@ else:
             "acc0Train,acc1Train,acc2Train,acc3Train,acc4Train,acc5Train," +
             "acc6Train,acc7Train,acc8Train,acc9Train," +
             "acc0Val,acc1Val,acc2Val,acc3Val,acc4Val,acc5Val,acc6Val,acc7Val," +
-            "acc8Val,acc9Val")
+            "acc8Val,acc9Val\n")
 
     agentFileName = "agent-{}.pkl".format(timestamp)
     trainerFileName = "trainer-{}.pkl".format(timestamp)
@@ -266,7 +266,7 @@ for g in range(options.nGens):
             fitTrain, fitVal) +
             ",".join([str(s) for s in [scoresTrain[c] for c in range(10)]]) +
             "," +
-            ",".join([str(s) for s in [scoresVal[c] for c in range(10)]]))
+            ",".join([str(s) for s in [scoresVal[c] for c in range(10)]]) + "\n")
 
     print("Saving Agent and Trainer...")
     bestAgent.saveToFile(agentFileName)
