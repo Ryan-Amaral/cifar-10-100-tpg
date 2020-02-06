@@ -198,11 +198,14 @@ else:
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M")
     generationalLogName = "generational-log-{}.txt".format(timestamp)
     with open(generationalLogName, "a") as f:
-        f.write("""gen,hoursElapsed,fitnessTrain,fitnessVal,
-            acc0Train,acc1Train,acc2Train,acc3Train,acc4Train,acc5Train,
-            acc6Train,acc7Train,acc8Train,acc9Train,
-            acc0Val,acc1Val,acc2Val,acc3Val,acc4Val,acc5Val,acc6Val,acc7Val,
-            acc8Val,acc9Val""")
+        f.write("gen,hoursElapsed,fitnessTrain,fitnessVal," +
+            "acc0Train,acc1Train,acc2Train,acc3Train,acc4Train,acc5Train," +
+            "acc6Train,acc7Train,acc8Train,acc9Train," +
+            "acc0Val,acc1Val,acc2Val,acc3Val,acc4Val,acc5Val,acc6Val,acc7Val," +
+            "acc8Val,acc9Val")
+
+    agentFileName = "agent-{}.pkl".format(timestamp)
+    trainerFileName = "trainer-{}.pkl".format(timestamp)
 
     print("Setting up TPG...")
     # set up tpg
@@ -264,3 +267,7 @@ for g in range(options.nGens):
             ",".join([str(s) for s in [scoresTrain[c] for c in range(10)]]) +
             "," +
             ",".join([str(s) for s in [scoresVal[c] for c in range(10)]]))
+
+    print("Saving Agent and Trainer...")
+    bestAgent.saveToFile(agentFileName)
+    trainer.saveToFile(trainerFileName)
