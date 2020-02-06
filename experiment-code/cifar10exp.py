@@ -8,6 +8,7 @@ import pandas as pd
 import random
 import copy
 import datetime
+import time
 
 ################################################################################
 # command line argument options
@@ -141,8 +142,8 @@ def runAgentWise(agent, samples, labels, counts):
         agent.team.outcomes[labels[i]] = (agent.team.outcomes.get(labels[i], 0) +
                                           score/counts[labels[i]])
 
-# run one agent on all data (samples) for validation
-def runAgentValidation(agent, samples, labels, counts):
+# run one agent on all data (samples) for validation or testing
+def runAgentValTest(agent, samples, labels, counts):
     for i in range(len(samples)):
         guess = agent.act(samples[i]/255)
         score = guess == labels[i]
@@ -188,11 +189,6 @@ def runAgents(agents, data, labels, counts):
 # experiment setup
 ################################################################################
 
-print("Setting up TPG...")
-# set up tpg
-trainer = Trainer(actions=range(10),
-                  teamPopSize=options.popSize, rTeamPopSize=options.popSize)
-
 # logs
 if options.timestamp is not None:
     # continue from previous run's timestamp
@@ -201,7 +197,18 @@ else:
     # new timestamp for a new run
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M")
     generationalLogName = "generational-log-{}.txt".format(timestamp)
-    with open()
+    with open(generationalLogName, "a") as f:
+        f.write("""gen,hoursElapsed,fitnessTrain,fitnessVal,
+            acc0Train,acc1Train,acc2Train,acc3Train,acc4Train,acc5Train,
+            acc6Train,acc7Train,acc8Train,acc9Train,
+            acc0Val,acc1Val,acc2Val,acc3Val,acc4Val,acc5Val,acc6Val,acc7Val,
+            acc8Val,acc9Val""")
+
+    print("Setting up TPG...")
+    # set up tpg
+    trainer = Trainer(actions=range(10),
+                      teamPopSize=options.popSize, rTeamPopSize=options.popSize,
+                      sourceRange=3072)
 
 
 # get the correct fitness method
@@ -214,6 +221,7 @@ elif options.fitnessMethod == 2:
 elif options.fitnessMethod == 3:
     fitnessType = "dynamicLexicographic"
 
+tStart = time.time()
 
 ################################################################################
 # execute experiment
@@ -234,14 +242,25 @@ for g in range(options.nGens):
     print("Overall best agent (on train set):")
     bestAgent = trainer.getAgents(sortTasks=[c for c in range(10) if counts[c] > 0],
                                   multiTaskType=fitnessType)[0]
-    print(bestAgent.team.outcomes)
+    fitTrain = bestAgent.team.fitness
+    scoresTrain = copy.deepcopy(bestAgent.team.outcomes)
+    print("Train Scores: {}\nTrain Fitness: {}".format(scoresTrain, fitTrain))
 
     print("Evolving...")
     trainer.evolve(tasks=[c for c in range(10) if counts[c] > 0], multiTaskType=fitnessType)
 
     print("Overall best agent (on validation set):")
-    originalOutcomes = copy.deepcopy(bestAgent.team.outcomes)
     bestAgent.team.outcomes = {}
-    runAgentValidation(bestAgent, valData, valLabels, valCounts)
-    print(bestAgent.team.outcomes)
-    bestAgent.team.outcomes = originalOutcomes
+    runAgentValTest(bestAgent, valData, valLabels, valCounts)
+    fitVal = bestAgent.team.fitness
+    scoresVal = copy.deepcopy(bestAgent.team.outcomes)
+    print("Validate Scores: {}\nValidate Fitness: {}".format(fitVal, scoresVal))
+    # put original outcomes from train back on
+    bestAgent.team.outcomes = copy.deepcopy(scoresTrain)
+
+    with open(generationalLogName, "a") as f:
+        f.write("{},{},{},{},".format(g, (time.time()-tStart)/3600,
+            fitTrain, fitVal) +
+            ",".join([str(s) for s in [scoresTrain[c] for c in range(10)]]) +
+            "," +
+            ",".join([str(s) for s in [scoresVal[c] for c in range(10)]]))
